@@ -1,0 +1,10 @@
+Strategies {
+    every5Sec : "0/5 * * * * ?"
+    everyMinute : "0 * * * * ?"
+    default = everyChange
+}
+
+Items {
+    gGrid_TotalLoad*, Grid_Frequency, gGrid_AvgVoltage*, Grid_THD : strategy = everyChange, every5Sec
+    CEP_ProcessingLatency_ms : strategy = everyChange
+}

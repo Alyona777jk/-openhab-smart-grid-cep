@@ -1,0 +1,48 @@
+// ==========================================
+// 1. GRID TELEMETRY STREAM SOURCES (6 Nodes)
+// ==========================================
+Group:Number:SUM gGrid_TotalLoad "Загальне навантаження [%.2f кВт]" <energy>
+Group:Number:AVG gGrid_AvgVoltage "Середня напруга [%.1f В]" <energy>
+
+// Вузли Зони A (Пріоритет 1 - Критичні: Лікарня, Серверна)
+Number Node1_Hospital_Power "Вузол 1 (Лікарня): Потужність [%.2f кВт]" (gGrid_TotalLoad)
+Number Node2_DataCenter_Power "Вузол 2 (ЦОД): Потужність [%.2f кВт]" (gGrid_TotalLoad)
+
+// Вузли Зони B (Пріоритет 2 - Помірні: Житловий масив, Офіси)
+Number Node3_Residential_Power "Вузол 3 (Житловий): Потужність [%.2f кВт]" (gGrid_TotalLoad)
+Switch Node3_Relay "Реле Вузол 3"
+Number Node4_Commercial_Power "Вузол 4 (Офіси): Потужність [%.2f кВт]" (gGrid_TotalLoad)
+Switch Node4_Relay "Реле Вузол 4"
+
+// Вузли Зони C (Пріоритет 3 - Гнучкі/Відключаємі: Зарядки EV, Промисловість)
+Number Node5_EVCharger_Power "Вузол 5 (EV Зарядки): Потужність [%.2f кВт]" (gGrid_TotalLoad)
+Switch Node5_Relay "Реле Вузол 5"
+Number Node6_Industrial_Power "Вузол 6 (Промзона): Потужність [%.2f кВт]" (gGrid_TotalLoad)
+Switch Node6_Relay "Реле Вузол 6"
+
+// ==========================================
+// 2. POWER QUALITY & STABILITY PARAMETERS
+// ==========================================
+Number Grid_Frequency "Частота мережі [%.3f Гц]"
+Number Grid_Voltage_Z1 "Напруга Зона A [%.1f В]" (gGrid_AvgVoltage)
+Number Grid_Voltage_Z2 "Напруга Зона B [%.1f В]" (gGrid_AvgVoltage)
+Number Grid_Voltage_Z3 "Напруга Зона C [%.1f В]" (gGrid_AvgVoltage)
+Number Grid_THD "Гармонійні спотворення THD [%.2f %%]"
+Number Grid_PowerFlow_Balance "Баланс перетоків (Генерація - Споживання) [%.2f кВт]"
+Number Grid_Generation_Cap "Поточна генерація [%.2f кВт]"
+
+// ==========================================
+// 3. STATE MACHINE & DEMAND-RESPONSE CONTROL
+// ==========================================
+// Стани: NORMAL, PEAK_WARNING, SHEDDING_L1, SHEDDING_L2, ISLANDED, EMERGENCY_SHUTDOWN, RECOVERY
+String Grid_SystemState "Стан енергосистеми [%s]"
+Switch Sim_PeakTrigger "Симуляція: Пікове навантаження"
+Switch Sim_FaultTrigger "Симуляція: Каскадна аварія (Sag + Freq Drop)"
+Switch Sim_IslandingTrigger "Симуляція: Острівний режим (Islanding)"
+
+// ==========================================
+// 4. ALERTS & CEP PERFORMANCE METRICS
+// ==========================================
+String Grid_ActiveAlerts "Активні тривоги [%s]"
+Number CEP_ProcessingLatency_ms "Затримка обробки CEP [%.2f мс]"
+Number CEP_EventsProcessed "Оброблено подій [%d]"

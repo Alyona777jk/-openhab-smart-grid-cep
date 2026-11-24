@@ -1,0 +1,81 @@
+import java.util.Random
+
+val Random rand = new Random()
+
+rule "Init Smart Grid Stream"
+when
+    System started
+then
+    Grid_SystemState.postUpdate("NORMAL")
+    Grid_Generation_Cap.postUpdate(1200.0)
+    Node3_Relay.sendCommand(ON)
+    Node4_Relay.sendCommand(ON)
+    Node5_Relay.sendCommand(ON)
+    Node6_Relay.sendCommand(ON)
+    Sim_PeakTrigger.postUpdate(OFF)
+    Sim_FaultTrigger.postUpdate(OFF)
+    Sim_IslandingTrigger.postUpdate(OFF)
+    CEP_EventsProcessed.postUpdate(0)
+    Grid_ActiveAlerts.postUpdate("NONE")
+end
+
+rule "Real-Time Telemetry Stream Generator"
+when
+    Time cron "0/2 * * * * ?"
+then
+    // Автоініціалізація, якщо система стартувала до завантаження Items
+    if (Grid_Generation_Cap.state == NULL || Grid_Generation_Cap.state == UNDEF) {
+        Grid_SystemState.postUpdate("NORMAL")
+        Grid_Generation_Cap.postUpdate(1200.0)
+        Node3_Relay.sendCommand(ON)
+        Node4_Relay.sendCommand(ON)
+        Node5_Relay.sendCommand(ON)
+        Node6_Relay.sendCommand(ON)
+        Sim_PeakTrigger.postUpdate(OFF)
+        Sim_FaultTrigger.postUpdate(OFF)
+        Sim_IslandingTrigger.postUpdate(OFF)
+        CEP_EventsProcessed.postUpdate(0)
+        Grid_ActiveAlerts.postUpdate("NONE")
+        return;
+    }
+
+    val double noise = (rand.nextDouble() - 0.5) * 2.0
+
+    // 1. Потужність критичних вузлів (не вимикаються)
+    Node1_Hospital_Power.postUpdate(180.0 + noise * 3)
+    Node2_DataCenter_Power.postUpdate(250.0 + noise * 2)
+
+    // 2. Потужність керованих вузлів (залежить від стану реле)
+    val double n3 = if (Node3_Relay.state == ON) (150.0 + noise * 5) else 0.0
+    val double n4 = if (Node4_Relay.state == ON) (140.0 + noise * 4) else 0.0
+    Node3_Residential_Power.postUpdate(n3)
+    Node4_Commercial_Power.postUpdate(n4)
+
+    // 3. Гнучкі вузли (реагують на Sim_PeakTrigger)
+    val double peakFactor = if (Sim_PeakTrigger.state == ON) 2.4 else 1.0
+    val double n5 = if (Node5_Relay.state == ON) ((120.0 * peakFactor) + noise * 6) else 0.0
+    val double n6 = if (Node6_Relay.state == ON) ((210.0 * peakFactor) + noise * 8) else 0.0
+    Node5_EVCharger_Power.postUpdate(n5)
+    Node6_Industrial_Power.postUpdate(n6)
+
+    // 4. Частота, напруга та THD (реагують на аварійні тригери)
+    if (Sim_FaultTrigger.state == ON) {
+        Grid_Frequency.postUpdate(49.15 + noise * 0.05)
+        Grid_Voltage_Z1.postUpdate(225.0 + noise)
+        Grid_Voltage_Z2.postUpdate(192.0 + noise)
+        Grid_Voltage_Z3.postUpdate(185.0 + noise)
+        Grid_THD.postUpdate(8.4 + Math.abs(noise))
+    } else if (Sim_IslandingTrigger.state == ON) {
+        Grid_Frequency.postUpdate(50.85 + noise * 0.1)
+        Grid_Voltage_Z1.postUpdate(248.0 + noise)
+        Grid_Voltage_Z2.postUpdate(249.0 + noise)
+        Grid_Voltage_Z3.postUpdate(251.0 + noise)
+        Grid_THD.postUpdate(6.2 + Math.abs(noise))
+    } else {
+        Grid_Frequency.postUpdate(50.00 + noise * 0.02)
+        Grid_Voltage_Z1.postUpdate(230.0 + noise * 0.8)
+        Grid_Voltage_Z2.postUpdate(229.0 + noise * 1.1)
+        Grid_Voltage_Z3.postUpdate(228.5 + noise * 1.5)
+        Grid_THD.postUpdate(2.1 + Math.abs(noise * 0.3))
+    }
+end

@@ -1,0 +1,38 @@
+sitemap smart_grid label="Smart Grid Real-Time CEP Analytics" {
+    Frame label="1. Стан системи та CEP Метрики" {
+        Text item=Grid_SystemState valuecolor=["NORMAL"="green", "PEAK_WARNING"="orange", "SHEDDING_L1"="red", "EMERGENCY_SHUTDOWN"="maroon", "ISLANDED"="purple", "RECOVERY"="blue"]
+        Text item=Grid_ActiveAlerts valuecolor=["NONE"="green"]
+        Text item=CEP_ProcessingLatency_ms
+        Text item=CEP_EventsProcessed
+    }
+
+    Frame label="2. Інтерактивні сценарії (Для тестування)" {
+        Switch item=Sim_PeakTrigger
+        Switch item=Sim_FaultTrigger
+        Switch item=Sim_IslandingTrigger
+    }
+
+    Frame label="3. Баланс потужності та Якість електроенергії" {
+        Text item=gGrid_TotalLoad
+        Text item=Grid_Generation_Cap
+        Text item=Grid_PowerFlow_Balance
+        Text item=Grid_Frequency
+        Text item=Grid_THD
+        Text item=Grid_Voltage_Z1
+        Text item=Grid_Voltage_Z2
+        Text item=Grid_Voltage_Z3
+    }
+
+    Frame label="4. Управління навантаженням за пріоритетами" {
+        Text item=Node1_Hospital_Power label="P1: Лікарня (Критичний) [%.1f кВт]"
+        Text item=Node2_DataCenter_Power label="P1: ЦОД (Критичний) [%.1f кВт]"
+        Switch item=Node3_Relay label="P2: Житловий масив"
+        Text item=Node3_Residential_Power
+        Switch item=Node4_Relay label="P2: Офісний центр"
+        Text item=Node4_Commercial_Power
+        Switch item=Node5_Relay label="P3: EV Зарядні станції"
+        Text item=Node5_EVCharger_Power
+        Switch item=Node6_Relay label="P3: Промислова зона"
+        Text item=Node6_Industrial_Power
+    }
+}

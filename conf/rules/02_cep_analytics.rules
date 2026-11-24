@@ -1,0 +1,109 @@
+import java.time.ZonedDateTime
+
+var Timer recoveryTimer = null
+
+rule "CEP Real-Time Stream Analytics & Correlation Engine"
+when
+    Item gGrid_TotalLoad received update or
+    Item Grid_Frequency received update
+then
+    if (Grid_Generation_Cap.state == NULL || Grid_Frequency.state == NULL || Grid_THD.state == NULL) return;
+
+    val long startTime = java.lang.System::nanoTime()
+
+    val double totalLoad = (gGrid_TotalLoad.state as Number).doubleValue
+    val double genCap = (Grid_Generation_Cap.state as Number).doubleValue
+    val double freq = (Grid_Frequency.state as Number).doubleValue
+    val double thd = (Grid_THD.state as Number).doubleValue
+    val double vZ1 = if (Grid_Voltage_Z1.state != NULL) (Grid_Voltage_Z1.state as Number).doubleValue else 230.0
+    val double vZ2 = if (Grid_Voltage_Z2.state != NULL) (Grid_Voltage_Z2.state as Number).doubleValue else 230.0
+    val double vZ3 = if (Grid_Voltage_Z3.state != NULL) (Grid_Voltage_Z3.state as Number).doubleValue else 230.0
+
+    val double powerBalance = genCap - totalLoad
+    Grid_PowerFlow_Balance.postUpdate(powerBalance)
+
+    val ZonedDateTime windowStart = ZonedDateTime.now().minusSeconds(10)
+    val double avgFreq10s = (Grid_Frequency.averageSince(windowStart) ?: freq).doubleValue
+    val double avgLoad10s = (gGrid_TotalLoad.averageSince(windowStart) ?: totalLoad).doubleValue
+
+    var String currentState = if (Grid_SystemState.state != NULL) Grid_SystemState.state.toString else "NORMAL"
+    var String alerts = ""
+
+    // PATTERN 1: SPATIAL CORRELATION -> ISLANDING DETECTION
+    val boolean allZonesOverVoltage = (vZ1 > 242.0) && (vZ2 > 242.0) && (vZ3 > 242.0)
+    val boolean freqDrift = Math.abs(freq - 50.0) > 0.5
+
+    if (allZonesOverVoltage && freqDrift) {
+        currentState = "ISLANDED"
+        alerts = alerts + "[CRITICAL: ISLANDING DETECTED - Multi-zone V-Swell + Freq Drift] "
+        if (Node6_Relay.state == ON) Node6_Relay.sendCommand(OFF)
+    }
+    // PATTERN 2: TEMPORAL CORRELATION -> CASCADE FAILURE PREVENTION
+    else if (avgFreq10s < 49.4 && (vZ2 < 207.0 || vZ3 < 207.0)) {
+        currentState = "EMERGENCY_SHUTDOWN"
+        alerts = alerts + "[EMERGENCY: CASCADE RISK - Freq < 49.4Hz & Voltage Sag] "
+        if (Node6_Relay.state == ON) Node6_Relay.sendCommand(OFF)
+        if (Node5_Relay.state == ON) Node5_Relay.sendCommand(OFF)
+        if (Node4_Relay.state == ON) Node4_Relay.sendCommand(OFF)
+        if (Node3_Relay.state == ON) Node3_Relay.sendCommand(OFF)
+    }
+    // PATTERN 3: DEMAND-RESPONSE (PEAK SHAVING & LOAD BALANCING)
+    else if (avgLoad10s > genCap) {
+        currentState = "SHEDDING_L1"
+        alerts = alerts + "[DR ACTIVE: Overload (" + String.format("%.0f", avgLoad10s) + " kW) - Shedding Priority 3] "
+        if (Node6_Relay.state == ON) {
+            Node6_Relay.sendCommand(OFF)
+        } else if (Node5_Relay.state == ON) {
+            Node5_Relay.sendCommand(OFF)
+        }
+    }
+    else if (avgLoad10s > (genCap * 0.90) && currentState == "NORMAL") {
+        currentState = "PEAK_WARNING"
+        alerts = alerts + "[WARNING: Peak Demand > 90% Capacity] "
+    }
+
+    // PATTERN 4: HARMONIC DISTORTION (THD > 5.0%)
+    if (thd > 5.0) {
+        alerts = alerts + "[PQ ALERT: High THD " + String.format("%.1f", thd) + "%] "
+    }
+
+    // PATTERN 5: RECOVERY SEQUENCING
+    if (Sim_FaultTrigger.state == OFF && Sim_IslandingTrigger.state == OFF &&
+        Sim_PeakTrigger.state == OFF && freq >= 49.85 && freq <= 50.15 &&
+        (currentState == "EMERGENCY_SHUTDOWN" || currentState == "SHEDDING_L1" || currentState == "ISLANDED")) {
+
+        currentState = "RECOVERY"
+        alerts = "[INFO: Grid Stabilized - Initiating Phased Recovery]"
+
+        if (recoveryTimer === null) {
+            recoveryTimer = createTimer(now.plusSeconds(4), [ |
+                if (Node3_Relay.state == OFF) {
+                    Node3_Relay.sendCommand(ON)
+                    recoveryTimer.reschedule(now.plusSeconds(4))
+                } else if (Node4_Relay.state == OFF) {
+                    Node4_Relay.sendCommand(ON)
+                    recoveryTimer.reschedule(now.plusSeconds(4))
+                } else if (Node5_Relay.state == OFF) {
+                    Node5_Relay.sendCommand(ON)
+                    recoveryTimer.reschedule(now.plusSeconds(4))
+                } else if (Node6_Relay.state == OFF) {
+                    Node6_Relay.sendCommand(ON)
+                    Grid_SystemState.postUpdate("NORMAL")
+                    recoveryTimer = null
+                }
+            ])
+        }
+    } else if (alerts == "" && currentState != "RECOVERY") {
+        currentState = "NORMAL"
+        alerts = "NONE"
+    }
+
+    Grid_SystemState.postUpdate(currentState)
+    Grid_ActiveAlerts.postUpdate(alerts)
+
+    val long count = if (CEP_EventsProcessed.state != NULL) ((CEP_EventsProcessed.state as Number).longValue + 1) else 1L
+    CEP_EventsProcessed.postUpdate(count)
+
+    val double latencyMs = (java.lang.System::nanoTime() - startTime) / 1000000.0
+    CEP_ProcessingLatency_ms.postUpdate(latencyMs)
+end
